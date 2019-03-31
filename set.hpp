@@ -1,5 +1,9 @@
 #include <type_traits>
 
+/* Forward declaration required by following traits. */
+template <typename I, I... is>
+struct set;
+
 /**
  * Since there can only be one parameter pack in a variadic template,
  * these traits only make statements about properties of such a single parameter pack,
@@ -90,6 +94,38 @@ namespace type_traits
     constexpr const bool is_list_v { is_list<I, is...>() };
 }
 
+template <typename I, I... is>
+struct bag // or multi_set
+{
+    static_assert(sizeof...(is) == 0, "Empty bag is not empty.");
+
+    using set_t = set<I>;
+
+    constexpr static set_t to_set() {
+        return set_t{};
+    }
+};
+
+template <typename I, I i, I... is>
+struct bag<I, i, is...> : bag<I, is...> // or multi_set
+{   // TODO Check if this is correct!
+    using set_t = std::conditional_t<
+        type_traits::contains<I, is...>(i),
+        typename bag<I, is...>::set_t,
+        typename bag<I, is...>::set_t::template add_t<i>
+    >;
+
+    constexpr static set_t to_set() {
+        return set_t{};
+    }
+};
+
+namespace type_traits
+{   // This is presumably better than to_set().
+    template <typename I, I... is>
+    using set_t = typename bag<I, is...>::set_t;
+}
+
 /* This general case is only instantiated for the special case of the empty set. */
 template <typename I, I... is>
 struct set
@@ -137,11 +173,11 @@ struct set
 
     /* The union of this empty set with another set is the other set. */
     template <I... js>
-    using union_t = set<I, js...>;
+    using union_t = set<I, js...>; // Use to_set here to make sure...meep
 
     template <I... js>
     constexpr union_t<js...> operator +(set<I, js...> const & that) const noexcept {
-        return that;
+        return that; // Cannot use to_set here, either.
     }
 
     /* Subtracting a single element from this empty set does not change it. */
@@ -162,6 +198,9 @@ struct set
 template <typename I, I i, I... is>
 struct set<I, i, is...> : protected set<I, is...>
 {
+    static_assert(type_traits::is_set<I, i, is...>, "Set is not a set.");
+    static_assert(!type_traits::contains<I, is...>(i), "Duplicate in set.");
+
     constexpr static std::size_t size() noexcept {
         return 1 + sizeof...(is);
     }
@@ -173,8 +212,6 @@ struct set<I, i, is...> : protected set<I, is...>
     constexpr static bool contains(I j) noexcept {
         return type_traits::contains<I, i, is...>(j);
     }
-
-    static_assert(!type_traits::contains<I, is...>(i), "Duplicate in set.");
 
     /**
      * There is no guarantee that 'js' form a set, but a subset can be in anything.
@@ -236,7 +273,6 @@ struct set<I, i, is...> : protected set<I, is...>
     operator -(set<I, js...> const &) const noexcept {
         return typename set<I, js...>::template difference_t<i, is...>{};
     }
-    
 
 };
 
@@ -260,6 +296,7 @@ int main() {
         && is_list_v<int, 1, 1, 2> && is_list_v<int, 3, 2, 1> && !is_list_v<int, 3, 1, 2>
         && set<int, 1, 2>{} + set<int, 3, 2>{} == set<int, 2, 3, 1>{}
         && set<int, 1, 2>{} + set<int, 3, 2>{} != set<int, 3, 1>{}
-        && set<int, 1, 3, 2>{} - set<int, 2, 1>{} == set<int, 3>{};
-
+        && set<int, 1, 3, 2>{} - set<int, 2, 1>{} == set<int, 3>{}
+        && type_traits::set_t<int>{} == set<int>{} 
+        && type_traits::set_t<int, 0, 1, 1>{} == set<int, 1, 0>{};
 }
