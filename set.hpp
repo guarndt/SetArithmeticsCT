@@ -4,6 +4,9 @@
 template <typename I, I... is>
 struct set;
 
+template <typename I, I... is>
+struct list;
+
 /**
  * Since there can only be one parameter pack in a variadic template,
  * these traits only make statements about properties of such a single parameter pack,
@@ -99,29 +102,37 @@ struct bag // or multi_set
 {
     static_assert(sizeof...(is) == 0, "Empty bag is not empty.");
 
+    using cdr = bag<I>;
+
     using set_t = set<I>;
 
-    constexpr static set_t to_set() {
-        return set_t{};
+    constexpr static set_t to_set() noexcept {
+        return {};
     }
 };
 
 template <typename I, I i, I... is>
-struct bag<I, i, is...> : bag<I, is...> // or multi_set
-{   // TODO Check if this is correct!
+struct bag<I, i, is...> : protected bag<I, is...>
+{
+    constexpr static I car { i };
+
+    using cdr = bag<I, is...>;
+
+    using cdr_set = typename cdr::set_t;
+
     using set_t = std::conditional_t<
         type_traits::contains<I, is...>(i),
-        typename bag<I, is...>::set_t,
-        typename bag<I, is...>::set_t::template add_t<i>
+        cdr_set,
+        typename cdr_set::template prepend<i>
     >;
 
-    constexpr static set_t to_set() {
-        return set_t{};
+    constexpr static set_t to_set() noexcept {
+        return {};
     }
 };
 
 namespace type_traits
-{   // This is presumably better than to_set().
+{   // This is presumably better than to_set(), as no object is constructed (yet).
     template <typename I, I... is>
     using set_t = typename bag<I, is...>::set_t;
 }
@@ -151,6 +162,12 @@ struct set
         return true;
     }
 
+    constexpr static bool is_everse_list { true };
+
+    constexpr static bool is_inverse_list { true };
+
+    constexpr static bool is_list { true };
+
     /* This empty set cannot be equal to a non-empty set of 'js'. */
     template <I... js>
     constexpr static bool equals() noexcept {
@@ -169,31 +186,46 @@ struct set
 
     /* Add a single element to this empty set. */
     template <I j>
-    using add_t = set<I, j>;
+    using prepend = set<I, j>;
+
+    template <I j>
+    using append = set<I, j>;
 
     /* The union of this empty set with another set is the other set. */
     template <I... js>
-    using union_t = set<I, js...>; // Use to_set here to make sure...meep
+    using union_t = set<I, js...>;
 
     template <I... js>
     constexpr union_t<js...> operator +(set<I, js...> const & that) const noexcept {
-        return that; // Cannot use to_set here, either.
+        return that;
     }
 
     /* Subtracting a single element from this empty set does not change it. */
     template <I j>
-    using subtract_t = set<I>;
+    using subtract = set<I>;
     
     /* Subtracting this empty set from another set does not change that set. */
     template <I... js>
-    using difference_t = set<I, js...>;
+    using difference = set<I, js...>;
 
     template <I... js>
-    constexpr difference_t<js...> operator -(set<I, js...> const & that) const noexcept {
+    constexpr difference<js...> operator -(set<I, js...> const & that) const noexcept {
         return that;
     }
 
+    template <I supremum>
+    using smaller_than = set<I>;
+
+    template <I supremum>
+    using larger_than = set<I>;
+
+    using quick_sort_t = set<I>;
+
+    constexpr static auto quick_sort() noexcept { return quick_sort_t{}; }
 };
+
+template <typename I, I i>
+using element = set<I, i>;
 
 template <typename I, I i, I... is>
 struct set<I, i, is...> : protected set<I, is...>
@@ -209,9 +241,29 @@ struct set<I, i, is...> : protected set<I, is...>
         return false;
     }
 
+    template <std::size_t n>
+    constexpr static I get() noexcept {
+        static_assert(n < size(), "Index out of range.");
+        if constexpr (n == 0) {
+            return i;
+        } else {
+            return set<I, is...>::template get<n-1>();
+        }
+    }
+
+    constexpr static I car { i };
+
+    using cdr = set<I, is...>;
+
     constexpr static bool contains(I j) noexcept {
         return type_traits::contains<I, i, is...>(j);
     }
+
+    constexpr static bool is_everse_list { type_traits::is_everse_list_v<I, i, is...> };
+
+    constexpr static bool is_inverse_list { type_traits::is_inverse_list_v<I, i, is...> };
+
+    constexpr static bool is_list { type_traits::is_list_v<I, i, is...> };
 
     /**
      * There is no guarantee that 'js' form a set, but a subset can be in anything.
@@ -240,25 +292,31 @@ struct set<I, i, is...> : protected set<I, is...>
     }
 
     template <I j>
-    using add_t = std::conditional_t<contains(j),
+    using append = std::conditional_t<contains(j),
+        set<I, i, is...>,
+        set<I, i, is..., j>
+    >;
+
+    template <I j>
+    using prepend = std::conditional_t<contains(j),
         set<I, i, is...>,
         set<I, j, i, is...>
     >;
 
     // TODO Make sure that 'js' form a set.
     template <I... js>
-    using union_t = typename set<I, is...>::template union_t<js...>::template add_t<i>;
+    using union_t = typename set<I, is...>::template union_t<js...>::template prepend<i>;
 
     template <I... js>
     constexpr union_t<js...> operator +(set<I, js...> const &) const noexcept {
-        return union_t<js...>{};
+        return {};
     }
 
     /* As each element of a set is unique, it only needs to be eliminated once. */
     template <I j>
-    using subtract_t = std::conditional_t<i == j,
-        set<I, is...>, // TODO Generalize this for lists by recursing further without re-adding?
-        typename set<I, is...>::template subtract_t<j>::template add_t<i>
+    using subtract = std::conditional_t<i == j,
+        set<I, is...>,
+        typename set<I, is...>::template subtract<j>::template prepend<i>
     >;
 
     /**
@@ -266,14 +324,29 @@ struct set<I, i, is...> : protected set<I, is...>
      * The elements of this set are eliminated from 'js' one by one, starting with 'i'.
      */
     template <I... js>
-    using difference_t = typename set<I, js...>::template subtract_t<i>::template difference_t<is...>;
+    using difference = typename set<I, js...>::template subtract<i>::template difference<is...>;
 
     template <I... js>
-    constexpr typename set<I, js...>::template difference_t<i, is...>
+    constexpr typename set<I, js...>::template difference<i, is...>
     operator -(set<I, js...> const &) const noexcept {
-        return typename set<I, js...>::template difference_t<i, is...>{};
+        return {};
     }
 
+    template <I supremum>
+    using smaller_than = std::conditional_t<i < supremum,
+        typename set<I, is...>::template smaller_than<supremum>::template prepend<i>,
+        typename set<I, is...>::template smaller_than<supremum>
+    >;
+    
+    template <I infimum>
+    using larger_than = std::conditional_t<infimum < i,
+        typename set<I, is...>::template larger_than<infimum>::template prepend<i>,
+        typename set<I, is...>::template larger_than<infimum>
+    >;
+
+    constexpr static auto quick_sort() noexcept {
+        return smaller_than<i>::quick_sort() + set<I, i>{} + larger_than<i>::quick_sort();
+    }
 };
 
 using namespace type_traits;
@@ -287,7 +360,11 @@ int main() {
     constexpr bool const a { set_t::contains(3) };
     constexpr bool const b { set_t::contains(4) };
     constexpr bool const c { contains<unsigned, 1, 3, 4, 7, 0>(1) };
+
+    constexpr auto sorted(set<int, 4, 1, 7, 3, 2, 6, 5>::quick_sort());
+
     return a && b && c && subset && equal 
+        && set<int, 2, 1, 0>::get<2>() == 0
         && union_t::contains(2) && !union_t::contains(-2)
         && some_set.contains(-5) && !some_set.contains(5) 
         && is_set<int, 1, 2, 3>() && !is_set_v<int, 1, 1, 2>
@@ -298,5 +375,8 @@ int main() {
         && set<int, 1, 2>{} + set<int, 3, 2>{} != set<int, 3, 1>{}
         && set<int, 1, 3, 2>{} - set<int, 2, 1>{} == set<int, 3>{}
         && type_traits::set_t<int>{} == set<int>{} 
-        && type_traits::set_t<int, 0, 1, 1>{} == set<int, 1, 0>{};
+        && type_traits::set_t<int, 0, 1, 1>{} == set<int, 1, 0>{}
+        && set<int, 1, 2, 4, 3>::smaller_than<2>{} == set<int, 1>{}
+        && set<int, 1, 2, 4, 3>::larger_than<2>{} == set<int, 3, 4>{}
+        && sorted.is_everse_list && sorted == set<int, 7, 1, 2, 3, 4, 6, 5>{};
 }
