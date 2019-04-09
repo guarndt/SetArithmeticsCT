@@ -26,11 +26,6 @@ namespace type_traits
         return i == j || contains<I, is...>(j);
     }
 
-    template <typename I, I j, I... is>
-    constexpr const bool contains_v {
-        contains<I, is...>(j)
-    };
-
     /* set */
     template <typename I>
     constexpr bool is_set() noexcept {
@@ -137,6 +132,9 @@ namespace type_traits
     using set_t = typename bag<I, is...>::set_t;
 }
 
+    template<typename I>
+    using empty_set = set<I>;
+
 /* This general case is only instantiated for the special case of the empty set. */
 template <typename I, I... is>
 struct set
@@ -150,6 +148,8 @@ struct set
     constexpr static bool empty() noexcept {
         return true;
     }
+
+    using empty_set = empty_set<I>;
 
     /* This empty set does not contain any item. */
     constexpr static bool contains(I j) noexcept {
@@ -202,7 +202,7 @@ struct set
 
     /* Subtracting a single element from this empty set does not change it. */
     template <I j>
-    using subtract = set<I>;
+    using subtract = empty_set;
     
     /* Subtracting this empty set from another set does not change that set. */
     template <I... js>
@@ -213,15 +213,23 @@ struct set
         return that;
     }
 
-    template <I supremum>
-    using smaller_than = set<I>;
+    template <I... js>
+    using intersection = empty_set;
+
+    template <I... js>
+    constexpr intersection<js...> operator *(set<I, js...> const &) const noexcept {
+        return {};
+    }
 
     template <I supremum>
-    using larger_than = set<I>;
+    using smaller_than = empty_set;
 
-    using quick_sort_t = set<I>;
+    template <I supremum>
+    using larger_than = empty_set;
 
-    constexpr static auto quick_sort() noexcept { return quick_sort_t{}; }
+    using quick_sort_t = empty_set;
+
+    constexpr static quick_sort_t quick_sort() noexcept { return {}; }
 };
 
 template <typename I, I i>
@@ -241,6 +249,8 @@ struct set<I, i, is...> : protected set<I, is...>
         return false;
     }
 
+    using empty_set = empty_set<I>;
+
     template <std::size_t n>
     constexpr static I get() noexcept {
         static_assert(n < size(), "Index out of range.");
@@ -251,9 +261,9 @@ struct set<I, i, is...> : protected set<I, is...>
         }
     }
 
-    constexpr static I car { i };
+    constexpr static I head { i };
 
-    using cdr = set<I, is...>;
+    using tail = set<I, is...>;
 
     constexpr static bool contains(I j) noexcept {
         return type_traits::contains<I, i, is...>(j);
@@ -332,6 +342,17 @@ struct set<I, i, is...> : protected set<I, is...>
         return {};
     }
 
+    template <I... js>
+    using intersection = std::conditional_t<type_traits::contains<I, js...>(i),
+        typename set<I, is...>::template intersection<js...>::template prepend<i>,
+        typename set<I, is...>::template intersection<js...>
+    >;
+
+    template <I... js>
+    constexpr intersection<js...> operator *(set<I, js...> const &) const noexcept {
+        return {};
+    }
+
     template <I supremum>
     using smaller_than = std::conditional_t<i < supremum,
         typename set<I, is...>::template smaller_than<supremum>::template prepend<i>,
@@ -347,6 +368,7 @@ struct set<I, i, is...> : protected set<I, is...>
     constexpr static auto quick_sort() noexcept {
         return smaller_than<i>::quick_sort() + set<I, i>{} + larger_than<i>::quick_sort();
     }
+
 };
 
 using namespace type_traits;
@@ -376,6 +398,7 @@ int main() {
         && set<int, 1, 3, 2>{} - set<int, 2, 1>{} == set<int, 3>{}
         && type_traits::set_t<int>{} == set<int>{} 
         && type_traits::set_t<int, 0, 1, 1>{} == set<int, 1, 0>{}
+        && set<int, 1, 2, 3>{} * set<int, 4, 3, 2>{} == set<int, 3, 2>{}
         && set<int, 1, 2, 4, 3>::smaller_than<2>{} == set<int, 1>{}
         && set<int, 1, 2, 4, 3>::larger_than<2>{} == set<int, 3, 4>{}
         && sorted.is_everse_list && sorted == set<int, 7, 1, 2, 3, 4, 6, 5>{};
