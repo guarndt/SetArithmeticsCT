@@ -43,53 +43,56 @@ namespace type_traits
     };
 
     /* everse list */
-    template <typename I>
-    constexpr bool is_everse_list() noexcept {
-        return true;
-    }
+    namespace detail
+    {
+        template <typename I>
+        constexpr bool is_everse_list() noexcept {
+            return true;
+        }
 
-    template <typename I, I i>
-    constexpr bool is_everse_list() noexcept {
-        return true;
-    }
+        template <typename I, I i>
+        constexpr bool is_everse_list() noexcept {
+            return true;
+        }
 
-    template <typename I, I i, I j, I... ks>
-    constexpr bool is_everse_list() noexcept {
-        return i <= j && is_everse_list<I, j, ks...>();
+        template <typename I, I i, I j, I... ks>
+        constexpr bool is_everse_list() noexcept {
+            return i <= j && is_everse_list<I, j, ks...>();
+        }
     }
 
     template <typename I, I... is>
-    constexpr const bool is_everse_list_v {
-        is_everse_list<I, is...>()
+    constexpr const bool is_everse_list {
+        detail::is_everse_list<I, is...>()
     };
 
     /* inverse list */
-    template <typename I>
-    constexpr bool is_inverse_list() noexcept {
-        return true;
-    }
+    namespace detail
+    {
+        template <typename I>
+        constexpr bool is_inverse_list() noexcept {
+            return true;
+        }
 
-    template <typename I, I i>
-    constexpr bool is_inverse_list() noexcept {
-        return true;
-    }
+        template <typename I, I i>
+        constexpr bool is_inverse_list() noexcept {
+            return true;
+        }
 
-    template <typename I, I i, I j, I... ks>
-    constexpr bool is_inverse_list() noexcept {
-        return i >= j && is_inverse_list<I, j, ks...>();
+        template <typename I, I i, I j, I... ks>
+        constexpr bool is_inverse_list() noexcept {
+            return i >= j && is_inverse_list<I, j, ks...>();
+        }
     }
 
     template <typename I, I... is>
-    constexpr const bool is_inverse_list_v {
-        is_inverse_list<I, is...>()
+    constexpr const bool is_inverse_list {
+        detail::is_inverse_list<I, is...>()
     };
 
     /* list */
     template <typename I, I... is>
-    constexpr bool is_list() noexcept { return is_everse_list_v<I, is...> || is_inverse_list_v<I, is...>; }
-
-    template <typename I, I... is>
-    constexpr const bool is_list_v { is_list<I, is...>() };
+    constexpr const bool is_list { is_everse_list<I, is...> || is_inverse_list<I, is...> };
 }
 
 template <typename I, I... is>
@@ -97,37 +100,33 @@ struct bag // or multi_set
 {
     static_assert(sizeof...(is) == 0, "Empty bag is not empty.");
 
-    using cdr = bag<I>;
+    using tail = bag<I>;
 
     using set_t = set<I>;
 
-    constexpr static set_t to_set() noexcept {
-        return {};
-    }
+    constexpr static set_t const as_set {};
 };
 
 template <typename I, I i, I... is>
 struct bag<I, i, is...> : protected bag<I, is...>
 {
-    constexpr static I car { i };
+    constexpr static I head { i };
 
-    using cdr = bag<I, is...>;
+    using tail = bag<I, is...>;
 
-    using cdr_set = typename cdr::set_t;
+    using tail_set = typename tail::set_t;
 
     using set_t = std::conditional_t<
         type_traits::contains<I, is...>(i),
-        cdr_set,
-        typename cdr_set::template prepend<i>
+        tail_set,
+        typename tail_set::template prepend<i>
     >;
 
-    constexpr static set_t to_set() noexcept {
-        return {};
-    }
+    constexpr static set_t const as_set {};
 };
 
 namespace type_traits
-{   // This is presumably better than to_set(), as no object is constructed (yet).
+{   // This is presumably better than as_set, as no object is constructed (yet).
     template <typename I, I... is>
     using set_t = typename bag<I, is...>::set_t;
 }
@@ -158,30 +157,28 @@ struct set
 
     /* This empty set is a subset of any set (of the same item type). */
     template <I... js>
-    constexpr static bool subset_of() noexcept {
-        return true;
-    }
+    constexpr static bool subset_of { true };
 
-    constexpr static bool is_everse_list { true };
+    constexpr static bool const is_everse_list { true };
 
-    constexpr static bool is_inverse_list { true };
+    constexpr static bool const is_inverse_list { true };
 
-    constexpr static bool is_list { true };
+    constexpr static bool const is_list { true };
 
     /* This empty set cannot be equal to a non-empty set of 'js'. */
     template <I... js>
-    constexpr static bool equals() noexcept {
-        return 0 == sizeof...(js);
-    }
+    constexpr static bool equals {
+        0 == sizeof...(js)
+    };
 
     template <I... js>
     constexpr bool operator ==(set<I, js...> const &) const noexcept {
-        return equals<js...>();
+        return equals<js...>;
     }
 
     template <I... js>
     constexpr bool operator !=(set<I, js...> const &) const noexcept {
-        return !equals<js...>();
+        return !equals<js...>;
     }
 
     /* Add a single element to this empty set. */
@@ -269,36 +266,36 @@ struct set<I, i, is...> : protected set<I, is...>
         return type_traits::contains<I, i, is...>(j);
     }
 
-    constexpr static bool is_everse_list { type_traits::is_everse_list_v<I, i, is...> };
+    constexpr static bool const is_everse_list { type_traits::is_everse_list<I, i, is...> };
 
-    constexpr static bool is_inverse_list { type_traits::is_inverse_list_v<I, i, is...> };
+    constexpr static bool const is_inverse_list { type_traits::is_inverse_list<I, i, is...> };
 
-    constexpr static bool is_list { type_traits::is_list_v<I, i, is...> };
+    constexpr static bool const is_list { type_traits::is_list<I, i, is...> };
 
     /**
      * There is no guarantee that 'js' form a set, but a subset can be in anything.
      */
     template <I... js>
-    constexpr static bool subset_of() noexcept {
-        return type_traits::contains<I, js...>(i) 
-            && set<I, is...>::template subset_of<js...>();
-    }
+    constexpr static bool subset_of {
+        type_traits::contains<I, js...>(i) 
+            && set<I, is...>::template subset_of<js...>
+    };
 
     /* Equal sets are subsets of each other. */
     template <I... js>
-    constexpr static bool equals() noexcept {
-        return subset_of<js...>()
-            && set<I, js...>::template subset_of<i, is...>();
-    }
+    constexpr static bool equals {
+        subset_of<js...>
+            && set<I, js...>::template subset_of<i, is...>
+    };
 
     template <I... js>
     constexpr bool operator ==(set<I, js...> const &) const noexcept {
-        return equals<js...>();
+        return equals<js...>;
     }
 
     template <I... js>
     constexpr bool operator !=(set<I, js...> const &) const noexcept {
-        return !equals<js...>();
+        return !equals<js...>;
     }
 
     template <I j>
@@ -377,8 +374,8 @@ int main() {
     using set_t = set<short, -1, 3, 4>;
     using union_t = set_t::union_t<0, 3, 2>;
     constexpr const auto some_set(set_t{} + set<short, -2, -5>{});
-    constexpr const bool subset { set_t::subset_of<-1, 3, 5, 4>() };
-    constexpr const bool equal { set_t::equals<3, 4, -1>() };
+    constexpr const bool subset { set_t::subset_of<-1, 3, 5, 4> };
+    constexpr const bool equal { set_t::equals<3, 4, -1> };
     constexpr bool const a { set_t::contains(3) };
     constexpr bool const b { set_t::contains(4) };
     constexpr bool const c { contains<unsigned, 1, 3, 4, 7, 0>(1) };
@@ -390,9 +387,9 @@ int main() {
         && union_t::contains(2) && !union_t::contains(-2)
         && some_set.contains(-5) && !some_set.contains(5) 
         && is_set<int, 1, 2, 3>() && !is_set_v<int, 1, 1, 2>
-        && is_everse_list_v<int, 1, 1, 2> && !is_everse_list_v<int, 3, 2, 2, 0>
-        && !is_inverse_list_v<int, 1, 1, 2> && is_inverse_list_v<int, 3, 2, 2, 0>
-        && is_list_v<int, 1, 1, 2> && is_list_v<int, 3, 2, 1> && !is_list_v<int, 3, 1, 2>
+        && is_everse_list<int, 1, 1, 2> && !is_everse_list<int, 3, 2, 2, 0>
+        && !is_inverse_list<int, 1, 1, 2> && is_inverse_list<int, 3, 2, 2, 0>
+        && is_list<int, 1, 1, 2> && is_list<int, 3, 2, 1> && !is_list<int, 3, 1, 2>
         && set<int, 1, 2>{} + set<int, 3, 2>{} == set<int, 2, 3, 1>{}
         && set<int, 1, 2>{} + set<int, 3, 2>{} != set<int, 3, 1>{}
         && set<int, 1, 3, 2>{} - set<int, 2, 1>{} == set<int, 3>{}
