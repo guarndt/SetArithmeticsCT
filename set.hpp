@@ -108,7 +108,7 @@ struct bag // or multi_set
 };
 
 template <typename I, I i, I... is>
-struct bag<I, i, is...> : protected bag<I, is...>
+struct bag<I, i, is...>
 {
     constexpr static I head { i };
 
@@ -233,7 +233,7 @@ template <typename I, I i>
 using element = set<I, i>;
 
 template <typename I, I i, I... is>
-struct set<I, i, is...> : protected set<I, is...>
+struct set<I, i, is...>
 {
     static_assert(type_traits::is_set<I, i, is...>, "Set is not a set.");
     static_assert(!type_traits::contains<I, is...>(i), "Duplicate in set.");
@@ -258,7 +258,7 @@ struct set<I, i, is...> : protected set<I, is...>
         }
     }
 
-    constexpr static I head { i };
+    constexpr static I const head { i };
 
     using tail = set<I, is...>;
 
